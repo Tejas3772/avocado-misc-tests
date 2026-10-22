@@ -39,7 +39,7 @@ class perf_mem(Test):
         detected_distro = distro.detect()
         self.distro_name = detected_distro.name
 
-        deps = ['gcc', 'make']
+        deps = ['gcc', 'make', 'strace']
         if self.distro_name in ['rhel', 'SuSE', 'fedora', 'centos']:
             deps.extend(['perf'])
         elif self.distro_name in ['Ubuntu', 'debian']:

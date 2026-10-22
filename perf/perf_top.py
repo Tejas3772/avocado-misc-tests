@@ -20,8 +20,9 @@ import platform
 import pexpect
 import tempfile
 import os
+import shutil
 from avocado import Test
-from avocado.utils import distro, dmesg, process, genio
+from avocado.utils import distro, dmesg, process, genio, archive, build
 from avocado.utils.software_manager.manager import SoftwareManager
 
 
@@ -32,6 +33,39 @@ class perf_top(Test):
     possible flags with the help of yaml file
     :avocado: tags=perf,top
     """
+
+    def install_ebizzy(self, smm):
+        '''
+        ebizzy is not packaged in every distro repo (for example SLES 16.x),
+        so try the package manager first and fall back to building it from
+        source and installing it into /usr/local/bin.
+        Source:
+        https://sourceforge.net/projects/ebizzy/files/ebizzy/0.3/ebizzy-0.3.tar.gz
+        '''
+        if shutil.which('ebizzy'):
+            return
+        if smm.check_installed('ebizzy') or smm.install('ebizzy'):
+            if shutil.which('ebizzy'):
+                return
+
+        for package in ['tar', 'make', 'gcc']:
+            if not smm.check_installed(package) and not smm.install(package):
+                self.cancel('%s is needed for the test to be run' % package)
+
+        url = self.params.get(
+            'ebizzy_url',
+            default='https://sourceforge.net/projects/ebizzy/files/ebizzy/'
+                    '0.3/ebizzy-0.3.tar.gz')
+        tarball = self.fetch_asset(url)
+        archive.extract(tarball, self.workdir)
+        version = os.path.basename(tarball.split('.tar.')[0])
+        sourcedir = os.path.join(self.workdir, version)
+        process.run("cd %s && ./configure" % sourcedir, shell=True)
+        build.make(sourcedir)
+        process.run("install -m 0755 %s/ebizzy /usr/local/bin/ebizzy" %
+                    sourcedir, shell=True, sudo=True)
+        if not shutil.which('ebizzy'):
+            self.cancel('ebizzy is needed for the test to be run')
 
     def setUp(self):
         '''
@@ -50,13 +84,16 @@ class perf_top(Test):
         elif 'debian' in detected_distro.name:
             deps.extend(['linux-perf'])
         elif self.distro_name in ['rhel', 'SuSE', 'fedora', 'centos']:
-            deps.extend(['perf', 'python3-pexpect'])
+            # pexpect is imported at module level, so no package check needed
+            deps.extend(['perf'])
         else:
             self.cancel("Install the package for perf supported \
                          by %s" % detected_distro.name)
         for package in deps:
             if not smm.check_installed(package) and not smm.install(package):
                 self.cancel('%s is needed for the test to be run' % package)
+
+        self.install_ebizzy(smm)
 
         # Getting the parameters from yaml file
         self.option = self.params.get('option', default='')

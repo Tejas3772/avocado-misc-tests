@@ -40,7 +40,7 @@ class perf_c2c(Test):
         detected_distro = distro.detect()
         self.distro_name = detected_distro.name
 
-        deps = ['gcc', 'make']
+        deps = ['gcc', 'make', 'strace']
         if 'Ubuntu' in self.distro_name:
             deps.extend(['linux-tools-common', 'linux-tools-%s' %
                          platform.uname()[2]])
