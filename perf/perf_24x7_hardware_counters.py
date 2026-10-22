@@ -157,7 +157,9 @@ class EliminateDomainSuffix(Test):
         invalid_domains = [0, 7, 16]
         for domain in invalid_domains:
             result = self.event_stat(',domain=%s,core=1/ sleep 1' % domain)
-            if result.exit_status == 0 and b"not supported" in result.stderr:
+            # Newer perf exits non-zero ("No supported events found") after
+            # printing the "not supported" warning, so don't require exit 0.
+            if b"not supported" in result.stderr:
                 self.log.info("perf recognized domain as invalid domains")
             elif domain == 16 and result.exit_status != 0:
                 self.log.info("perf recognized domain as invalid domain")
