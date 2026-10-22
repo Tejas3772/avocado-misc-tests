@@ -54,14 +54,21 @@ class PerfSDT(Test):
         for line in str(self.libpthread).splitlines():
             if re.search('libpthread.so', line, re.IGNORECASE):
                 if 'lib64' in line:
-                    self.libpthread = line.split("=>")[1]
+                    self.libpthread = line.split("=>")[1].strip()
             if re.search('libc.so', line, re.IGNORECASE):
                 if 'lib64' in line:
-                    self.libc = line.split("=>")[1]
+                    self.libc = line.split("=>")[1].strip()
         if not self.libpthread:
             self.fail("Library %s not found" % self.libpthread)
         if not self.libc:
             self.fail("Library %s not found" % self.libc)
+        # A library already in the build-id cache (left by an earlier run or
+        # by another perf command) contributes its SDT events to the baseline
+        # count, so adding it again changes nothing and the comparison below
+        # fails even though the markers are present. Start from a clean cache.
+        for lib in (self.libpthread, self.libc):
+            process.system("perf buildid-cache -v --remove %s" % lib,
+                           sudo=True, shell=True, ignore_status=True)
         val = 0
         result = self.run_cmd_out("perf list")
         for line in str(result).splitlines():
@@ -87,8 +94,14 @@ class PerfSDT(Test):
         for line in str(result).splitlines():
             if 'SDT' in line:
                 new_val = new_val + 1
+        self.log.info("SDT events before: %s, after: %s (libpthread: %s, "
+                      "libc: %s)", val, new_val, self.libpthread, self.libc)
         if val == new_val:
-            self.fail("No SDT markers available in the %s" % self.libpthread)
+            # libpthread.so.0 is an empty stub on glibc 2.34 and later, so
+            # the markers come from libc; report both libraries.
+            self.fail("No SDT markers available in %s or %s (SDT events "
+                      "before: %s, after: %s)"
+                      % (self.libpthread, self.libc, val, new_val))
 
     def remove_library(self, param):
         perf_remove = "perf buildid-cache -v --remove %s" % param
