@@ -75,9 +75,24 @@ class perf_metric(Test):
         # Clear the dmesg to capture the delta at the end of the test.
         dmesg.clear_dmesg()
 
+    @staticmethod
+    def _get_hv_24x7_cpu():
+        """
+        hv_24x7 counts only on the CPUs in its cpumask, and perf drops the
+        event when -C names a CPU outside that mask. Use the first CPU of
+        the mask, falling back to CPU 0 when the PMU is not present.
+        """
+        try:
+            mask = genio.read_file(
+                '/sys/bus/event_source/devices/hv_24x7/cpumask').strip()
+            return int(mask.replace(',', '-').split('-')[0])
+        except (OSError, ValueError):
+            return 0
+
     def _run_cmd(self, option):
+        cpu_id = self._get_hv_24x7_cpu()
         for line in self.list_of_metric_events:
-            cmd = "perf stat %s %s -C 0 sleep 1" % (option, line)
+            cmd = "perf stat %s %s -C %s sleep 1" % (option, line, cpu_id)
             op = process.run(cmd, ignore_status=True, shell=True, verbose=True)
             output = (op.stdout + op.stderr).decode()
             # When the command failed, checking for expected failure or not.
